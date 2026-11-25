@@ -11,6 +11,7 @@ import { Radio, Upload, Activity, Settings, QrCode } from 'lucide-react-native';
 import { colors } from './src/theme/colors';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SendFilesScreen } from './src/screens/SendFilesScreen';
+import { TransferScreen } from './src/screens/TransferScreen';
 
 export type ScreenType = 'radar' | 'send' | 'transfer' | 'receive' | 'settings';
 
@@ -51,7 +52,13 @@ export default function App() {
             onBack={() => setCurrentScreen('radar')}
           />
         )}
-        {currentScreen !== 'radar' && currentScreen !== 'send' && (
+        {currentScreen === 'transfer' && (
+          <TransferScreen
+            onBack={() => setCurrentScreen('radar')}
+            onFinish={() => setCurrentScreen('radar')}
+          />
+        )}
+        {currentScreen !== 'radar' && currentScreen !== 'send' && currentScreen !== 'transfer' && (
           <HomeScreen
             onNavigateToSend={handleNavigateToSend}
             onNavigateToReceive={handleNavigateToReceive}
