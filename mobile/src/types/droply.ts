@@ -40,6 +40,19 @@ export interface DeviceInfo {
   protocol_badge?: string;
 }
 
+export interface RealFileEntry {
+  id: string;
+  name: string;
+  type: 'photo' | 'video' | 'doc' | 'audio' | 'archive' | 'sheet';
+  tag: string;
+  ext: string;
+  size_str: string;
+  size_bytes: number;
+  date_str: string;
+  color_bg: string;
+  source_path: string;
+}
+
 export interface QRPairingPayload {
   v: string;
   sid: string;

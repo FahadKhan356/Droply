@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -290,21 +293,121 @@ func (n *DroplyNode) startControlServer(bindAddr string) error {
 		})
 	}))
 
-	// 2. Discovered LAN Peers
+	// 2. Discovered LAN Peers (Real LAN peers + local host node)
 	mux.HandleFunc("/api/v1/peers", withCORS(func(w http.ResponseWriter, r *http.Request) {
+		peers := n.DiscoverySvc.ListPeers()
+		self := n.DeviceMgr.Self()
+		self.Port = n.Settings.ListenPort
+		self.Online = true
+		self.Trusted = true
+		self.DistanceHint = "Local Host"
+		self.ProtocolBadge = fmt.Sprintf("TLS 1.3 • :%d", self.Port)
+		hasSelf := false
+		for _, p := range peers {
+			if p.DeviceID == self.DeviceID {
+				hasSelf = true
+				break
+			}
+		}
+		if !hasSelf {
+			peers = append([]protocol.DeviceInfo{self}, peers...)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"peers": n.DiscoverySvc.ListPeers(),
+			"peers": peers,
 		})
 	}))
 
 	mux.HandleFunc("/api/v1/peers/rescan", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		_ = n.DiscoverySvc.BroadcastNow()
+		peers := n.DiscoverySvc.ListPeers()
+		self := n.DeviceMgr.Self()
+		self.Port = n.Settings.ListenPort
+		self.Online = true
+		self.Trusted = true
+		self.DistanceHint = "Local Host"
+		self.ProtocolBadge = fmt.Sprintf("TLS 1.3 • :%d", self.Port)
+		hasSelf := false
+		for _, p := range peers {
+			if p.DeviceID == self.DeviceID {
+				hasSelf = true
+				break
+			}
+		}
+		if !hasSelf {
+			peers = append([]protocol.DeviceInfo{self}, peers...)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "scanning",
-			"peers":  n.DiscoverySvc.ListPeers(),
+			"peers":  peers,
 		})
+	}))
+
+	// 2b. Real Local Filesystem & File Picker Upload Staging
+	mux.HandleFunc("/api/v1/files", withCORS(func(w http.ResponseWriter, r *http.Request) {
+		files := scanRealLocalFiles(n.StorageMgr.DownloadDir())
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"files": files,
+		})
+	}))
+
+	mux.HandleFunc("/api/v1/files/upload", withCORS(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		home, _ := os.UserHomeDir()
+		outboundDir := filepath.Join(home, ".droply", "outbound")
+		_ = os.MkdirAll(outboundDir, 0755)
+
+		rawName := r.Header.Get("X-File-Name")
+		var reader io.Reader = r.Body
+		defer r.Body.Close()
+
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+			if err := r.ParseMultipartForm(64 << 20); err == nil && r.MultipartForm != nil {
+				for _, fheaders := range r.MultipartForm.File {
+					if len(fheaders) > 0 {
+						fh := fheaders[0]
+						rawName = fh.Filename
+						f, err := fh.Open()
+						if err == nil {
+							defer f.Close()
+							reader = f
+						}
+						break
+					}
+				}
+			}
+		}
+
+		safeName, err := security.SanitizeFilename(rawName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		destPath := filepath.Join(outboundDir, safeName)
+		outFile, err := os.Create(destPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, copyErr := io.Copy(outFile, reader)
+		_ = outFile.Close()
+		if copyErr != nil {
+			http.Error(w, copyErr.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		entry, err := inspectRealFileEntry(destPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(entry)
 	}))
 
 	mux.HandleFunc("/api/v1/peers/manual", withCORS(func(w http.ResponseWriter, r *http.Request) {
@@ -683,3 +786,131 @@ func (n *DroplyNode) startControlServer(bindAddr string) error {
 	}()
 	return nil
 }
+
+// RealFileEntry represents an actual file on the host/device filesystem
+type RealFileEntry struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Type       string `json:"type"` // "photo", "video", "doc", "audio", "archive", "sheet"
+	Tag        string `json:"tag"`
+	Ext        string `json:"ext"`
+	SizeStr    string `json:"size_str"`
+	SizeBytes  int64  `json:"size_bytes"`
+	DateStr    string `json:"date_str"`
+	ColorBg    string `json:"color_bg"`
+	SourcePath string `json:"source_path"`
+}
+
+func classifyExtension(ext string) (fileType, tag, colorBg string) {
+	switch strings.ToLower(strings.TrimPrefix(ext, ".")) {
+	case "jpg", "jpeg", "png", "gif", "webp", "heic", "dng", "raw", "svg", "bmp":
+		return "photo", strings.ToUpper(strings.TrimPrefix(ext, ".")), "#dbeafe"
+	case "mp4", "mov", "mkv", "avi", "webm", "m4v":
+		return "video", "VIDEO", "#ede9fe"
+	case "mp3", "m4a", "wav", "flac", "aac", "ogg":
+		return "audio", "AUDIO", "#fef3c7"
+	case "zip", "tar", "gz", "7z", "rar", "dmg", "pkg":
+		return "archive", "ARCHIVE", "#e0e7ff"
+	case "xls", "xlsx", "csv", "numbers":
+		return "sheet", "SHEET", "#dcfce7"
+	default:
+		return "doc", strings.ToUpper(strings.TrimPrefix(ext, ".")), "#fee2e2"
+	}
+}
+
+func formatHumanBytes(b int64) string {
+	if b < 1024 {
+		return fmt.Sprintf("%d B", b)
+	}
+	kb := float64(b) / 1024.0
+	if kb < 1024 {
+		return fmt.Sprintf("%.1f KB", kb)
+	}
+	mb := kb / 1024.0
+	if mb < 1024 {
+		return fmt.Sprintf("%.1f MB", mb)
+	}
+	gb := mb / 1024.0
+	return fmt.Sprintf("%.2f GB", gb)
+}
+
+func inspectRealFileEntry(fullPath string) (RealFileEntry, error) {
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return RealFileEntry{}, err
+	}
+	ext := strings.ToUpper(strings.TrimPrefix(filepath.Ext(info.Name()), "."))
+	if ext == "" {
+		ext = "FILE"
+	}
+	fType, tag, bg := classifyExtension(ext)
+	if tag == "" {
+		tag = ext
+	}
+	return RealFileEntry{
+		ID:         fullPath,
+		Name:       info.Name(),
+		Type:       fType,
+		Tag:        tag,
+		Ext:        ext,
+		SizeStr:    formatHumanBytes(info.Size()),
+		SizeBytes:  info.Size(),
+		DateStr:    info.ModTime().Format("Jan 02, 15:04"),
+		ColorBg:    bg,
+		SourcePath: fullPath,
+	}, nil
+}
+
+func scanRealLocalFiles(downloadDir string) []RealFileEntry {
+	home, _ := os.UserHomeDir()
+	searchDirs := []string{
+		filepath.Join(home, ".droply", "outbound"),
+		downloadDir,
+		filepath.Join(home, "Downloads"),
+		filepath.Join(home, "Desktop"),
+		filepath.Join(home, "Documents"),
+		filepath.Join(home, "Pictures"),
+	}
+
+	seen := make(map[string]bool)
+	var results []RealFileEntry
+
+	for _, dir := range searchDirs {
+		if dir == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			fullPath := filepath.Join(dir, e.Name())
+			if seen[fullPath] {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil || info.Size() <= 0 {
+				continue
+			}
+			seen[fullPath] = true
+			if item, err := inspectRealFileEntry(fullPath); err == nil {
+				results = append(results, item)
+			}
+			if len(results) >= 40 {
+				break
+			}
+		}
+		if len(results) >= 40 {
+			break
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
+	return results
+}
+

@@ -36,6 +36,8 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useTransfer } from '../features/transfer/useTransfer';
+import { useDroplyStore } from '../store/useDroplyStore';
+import { formatBytes, estimateRemainingSeconds } from '../utils/formatters';
 
 interface TransferScreenProps {
   onBack?: () => void;
@@ -48,23 +50,40 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
 }) => {
   const {
     activeTransfer,
+    transfers,
     pauseActiveTransfer,
     resumeActiveTransfer,
     cancelActiveTransfer,
   } = useTransfer();
+  const { selfDevice, history } = useDroplyStore();
   const [isPaused, setIsPaused] = useState(false);
   const [keepAwake, setKeepAwake] = useState(true);
-  const [progress, setProgress] = useState(68);
-  const [speed, setSpeed] = useState(84.5);
-  const [activeFileProgress, setActiveFileProgress] = useState(72);
+
+  const progress = activeTransfer
+    ? Math.round(activeTransfer.progress_percent || 0)
+    : history.length > 0
+    ? 100
+    : 0;
+  const speed = activeTransfer
+    ? Number((activeTransfer.current_speed_mbps || 0).toFixed(1))
+    : history[0]
+    ? Number((history[0].average_speed_mbps || 0).toFixed(1))
+    : 0;
+  const peakSpeed = activeTransfer
+    ? Number((activeTransfer.peak_speed_mbps || speed).toFixed(1))
+    : speed;
+  const totalBytes = activeTransfer
+    ? activeTransfer.total_size
+    : history[0]?.total_size_bytes || 0;
+  const transferredBytes = activeTransfer
+    ? activeTransfer.transferred_bytes
+    : history[0]?.total_size_bytes || 0;
+  const etaStr = activeTransfer
+    ? estimateRemainingSeconds(totalBytes, transferredBytes, speed || 1)
+    : '0s';
 
   useEffect(() => {
     if (activeTransfer) {
-      setProgress(Math.round(activeTransfer.progress_percent || 0));
-      setActiveFileProgress(Math.round(activeTransfer.progress_percent || 0));
-      if (activeTransfer.current_speed_mbps > 0) {
-        setSpeed(Number(activeTransfer.current_speed_mbps.toFixed(1)));
-      }
       setIsPaused(activeTransfer.status === 'Paused');
     }
   }, [activeTransfer]);
@@ -81,24 +100,7 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
         useNativeDriver: true,
       })
     ).start();
-
-    // Progress counter simulation
-    const interval = setInterval(() => {
-      if (!isPaused) {
-        setProgress((prev) => {
-          if (prev >= 99) return 99;
-          return prev + 1;
-        });
-        setActiveFileProgress((prev) => {
-          if (prev >= 98) return 98;
-          return prev + 1;
-        });
-        setSpeed((prev) => +(80 + Math.random() * 12).toFixed(1));
-      }
-    }, 1200);
-
-    return () => clearInterval(interval);
-  }, [isPaused]);
+  }, []);
 
   const handleTogglePause = async () => {
     const nextPaused = !isPaused;
@@ -199,9 +201,17 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
                 <CheckCircle2 size={13} color={colors.tertiary} />
               </View>
             </View>
-            <Text style={styles.deviceNameText}>iPhone 15 Pro</Text>
-            <Text style={styles.deviceSelfTag}>(You)</Text>
-            <Text style={styles.deviceIpText}>192.168.1.42</Text>
+            <Text style={styles.deviceNameText} numberOfLines={1}>
+              {activeTransfer?.sender?.device_name ||
+                selfDevice?.device_name ||
+                'Local Node'}
+            </Text>
+            <Text style={styles.deviceSelfTag}>(Sender)</Text>
+            <Text style={styles.deviceIpText}>
+              {activeTransfer?.sender?.ip_address ||
+                selfDevice?.ip_address ||
+                '127.0.0.1'}
+            </Text>
           </View>
 
           {/* Transfer Wave Stream */}
@@ -226,9 +236,19 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
                 <Wifi size={13} color={colors.tertiaryContainer} />
               </View>
             </View>
-            <Text style={styles.deviceNameText}>Mac Studio M2</Text>
+            <Text style={styles.deviceNameText} numberOfLines={1}>
+              {activeTransfer?.receiver?.device_name ||
+                history[0]?.peer_device_name ||
+                selfDevice?.device_name ||
+                'Target Peer'}
+            </Text>
             <Text style={styles.deviceSubPath}>Downloads/DROPly</Text>
-            <Text style={styles.deviceIpText}>192.168.1.108</Text>
+            <Text style={styles.deviceIpText}>
+              {activeTransfer?.receiver?.ip_address ||
+                history[0]?.peer_ip ||
+                selfDevice?.ip_address ||
+                '127.0.0.1'}
+            </Text>
           </View>
         </View>
 
@@ -236,7 +256,13 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
         <View style={styles.metricsCard}>
           <View style={styles.metricsHeader}>
             <View>
-              <Text style={styles.metricsSendingLabel}>SENDING 3 FILES</Text>
+              <Text style={styles.metricsSendingLabel}>
+                {activeTransfer
+                  ? `${activeTransfer.status.toUpperCase()} (${activeTransfer.files?.length || 1} FILES)`
+                  : history.length > 0
+                  ? `LAST TRANSFER COMPLETED (${history[0].file_names.length} FILES)`
+                  : 'NO ACTIVE TRANSFER'}
+              </Text>
               <View style={styles.percentageRow}>
                 <Text style={styles.percentageNumber}>{progress}</Text>
                 <Text style={styles.percentageSign}>%</Text>
@@ -247,7 +273,7 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
               <Text style={styles.etaLabel}>Est. time remaining</Text>
               <View style={styles.etaValueRow}>
                 <Clock size={16} color={colors.primary} />
-                <Text style={styles.etaValue}>8s</Text>
+                <Text style={styles.etaValue}>{etaStr}</Text>
               </View>
             </View>
           </View>
@@ -264,9 +290,11 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
             </View>
             <View style={styles.progressStatsRow}>
               <Text style={styles.progressStatsLeft}>
-                {(2.1 * (progress / 100)).toFixed(2)} GB transferred
+                {formatBytes(transferredBytes)} transferred
               </Text>
-              <Text style={styles.progressStatsRight}>2.10 GB total</Text>
+              <Text style={styles.progressStatsRight}>
+                {formatBytes(totalBytes)} total
+              </Text>
             </View>
           </View>
 
@@ -284,7 +312,7 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
               <View style={styles.peakRow}>
                 <TrendingUp size={12} color={colors.primary} />
                 <Text style={styles.peakText}>
-                  Peak: <Text style={styles.peakBold}>112 MB/s</Text>
+                  Peak: <Text style={styles.peakBold}>{peakSpeed} MB/s</Text>
                 </Text>
               </View>
             </View>
@@ -292,7 +320,7 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
             <View style={styles.telemetryTile}>
               <View style={styles.tileHeader}>
                 <Text style={styles.tileTitle}>BANDWIDTH STABILITY</Text>
-                <Text style={styles.stabilityVal}>99.8%</Text>
+                <Text style={styles.stabilityVal}>100%</Text>
               </View>
               <View style={styles.sparklineContainer}>
                 <View style={[styles.sparkBar, { height: '60%' }]} />
@@ -304,86 +332,90 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
                 <View style={[styles.sparkBar, { height: '90%' }]} />
               </View>
               <Text style={styles.retransmitText}>
-                Zero packet retransmission
+                SHA-256 Chunk Verification Active
               </Text>
             </View>
           </View>
         </View>
 
-        {/* File Queue List Section */}
+        {/* Real File Queue & History List Section */}
         <View style={styles.queueSection}>
           <View style={styles.queueHeader}>
-            <Text style={styles.queueTitle}>Transfer Queue</Text>
-            <Text style={styles.queueSubtitle}>2 of 3 remaining</Text>
+            <Text style={styles.queueTitle}>Transfer Queue & History</Text>
+            <Text style={styles.queueSubtitle}>
+              {transfers.length} active • {history.length} in history
+            </Text>
           </View>
 
-          {/* Item 1: Completed */}
-          <View style={styles.queueItem}>
-            <View style={styles.queueItemIconCompleted}>
-              <FileText size={20} color={colors.onSurface} />
-            </View>
-            <View style={styles.queueItemDetails}>
-              <View style={styles.queueItemTitleRow}>
-                <Text style={styles.queueItemName} numberOfLines={1}>
-                  Design_System_Master.fig
-                </Text>
-                <View style={styles.doneBadge}>
-                  <CheckCircle2 size={13} color={colors.tertiary} />
-                  <Text style={styles.doneBadgeText}>Done</Text>
+          {activeTransfer &&
+            activeTransfer.files?.map((fm) => (
+              <View
+                key={fm.file_id}
+                style={[styles.queueItem, styles.queueItemActive]}
+              >
+                <View style={styles.queueItemIconActive}>
+                  <FileText size={20} color={colors.onPrimaryFixed} />
+                </View>
+                <View style={styles.queueItemDetails}>
+                  <View style={styles.queueItemTitleRow}>
+                    <Text style={styles.queueItemName} numberOfLines={1}>
+                      {fm.file_name}
+                    </Text>
+                    <Text style={styles.activePercentText}>{progress}%</Text>
+                  </View>
+                  <Text style={styles.queueItemMeta}>
+                    {formatBytes(fm.file_size)} • {activeTransfer.status} • SHA-256:{' '}
+                    {fm.sha256?.slice(0, 10)}...
+                  </Text>
+                  <View style={styles.microProgressBar}>
+                    <View
+                      style={[
+                        styles.microProgressFill,
+                        { width: `${progress}%` },
+                      ]}
+                    />
+                  </View>
                 </View>
               </View>
-              <Text style={styles.queueItemMeta}>
-                640 MB • Verified SHA-256
-              </Text>
-            </View>
-          </View>
+            ))}
 
-          {/* Item 2: Active In-Progress */}
-          <View style={[styles.queueItem, styles.queueItemActive]}>
-            <View style={styles.queueItemIconActive}>
-              <Video size={20} color={colors.onPrimaryFixed} />
-            </View>
-            <View style={styles.queueItemDetails}>
-              <View style={styles.queueItemTitleRow}>
-                <Text style={styles.queueItemName} numberOfLines={1}>
-                  Keynote_Presentation_4K.mov
-                </Text>
-                <Text style={styles.activePercentText}>
-                  {activeFileProgress}%
-                </Text>
+          {history.map((h) => (
+            <View key={h.transfer_id} style={styles.queueItem}>
+              <View style={styles.queueItemIconCompleted}>
+                <FileText size={20} color={colors.onSurface} />
               </View>
-              <Text style={styles.queueItemMeta}>
-                864 MB of 1.2 GB • {speed} MB/s
-              </Text>
-              {/* Micro Progress Bar */}
-              <View style={styles.microProgressBar}>
-                <View
-                  style={[
-                    styles.microProgressFill,
-                    { width: `${activeFileProgress}%` },
-                  ]}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Item 3: Queued */}
-          <View style={[styles.queueItem, styles.queueItemPending]}>
-            <View style={styles.queueItemIconPending}>
-              <FileArchive size={20} color={colors.onSurfaceVariant} />
-            </View>
-            <View style={styles.queueItemDetails}>
-              <View style={styles.queueItemTitleRow}>
-                <Text style={styles.queueItemName} numberOfLines={1}>
-                  Hero_Renders_Package.zip
-                </Text>
-                <View style={styles.inQueuePill}>
-                  <Text style={styles.inQueueText}>In Queue</Text>
+              <View style={styles.queueItemDetails}>
+                <View style={styles.queueItemTitleRow}>
+                  <Text style={styles.queueItemName} numberOfLines={1}>
+                    {h.file_names.join(', ')}
+                  </Text>
+                  <View style={styles.doneBadge}>
+                    <CheckCircle2 size={13} color={colors.tertiary} />
+                    <Text style={styles.doneBadgeText}>{h.status}</Text>
+                  </View>
                 </View>
+                <Text style={styles.queueItemMeta}>
+                  {formatBytes(h.total_size_bytes)} • {h.peer_device_name} • Verified SHA-256
+                </Text>
               </View>
-              <Text style={styles.queueItemMeta}>260 MB • Pending transfer</Text>
             </View>
-          </View>
+          ))}
+
+          {!activeTransfer && history.length === 0 && (
+            <View style={[styles.queueItem, styles.queueItemPending]}>
+              <View style={styles.queueItemIconPending}>
+                <FileArchive size={20} color={colors.onSurfaceVariant} />
+              </View>
+              <View style={styles.queueItemDetails}>
+                <Text style={styles.queueItemName}>
+                  No files transferred yet
+                </Text>
+                <Text style={styles.queueItemMeta}>
+                  Select files in the Send tab to initiate a real TLS 1.3 P2P transfer.
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Keep Screen Awake Utility */}

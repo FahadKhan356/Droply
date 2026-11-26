@@ -31,10 +31,11 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useDroplyStore } from '../store/useDroplyStore';
+import { formatBytes } from '../utils/formatters';
 
 const { width } = Dimensions.get('window');
 
-interface Peer {
+export interface Peer {
   id: string;
   name: string;
   deviceType: 'android' | 'tablet' | 'mac' | 'windows';
@@ -42,50 +43,20 @@ interface Peer {
   protocol: string;
   status: 'Ready' | 'Wi-Fi 6E' | 'Direct P2P' | 'Standby';
   ip: string;
+  port: number;
   position: { top?: number; bottom?: number; left?: number; right?: number };
 }
 
-const PEERS: Peer[] = [
-  {
-    id: '1',
-    name: "Alex's Galaxy",
-    deviceType: 'android',
-    distance: '1.2m',
-    protocol: '5GHz Direct',
-    status: 'Ready',
-    ip: '192.168.1.185',
-    position: { top: 24, right: 32 },
-  },
-  {
-    id: '2',
-    name: 'iPad Pro M4',
-    deviceType: 'tablet',
-    distance: '2.0m',
-    protocol: 'AirDrop P2P',
-    status: 'Direct P2P',
-    ip: '192.168.1.192',
-    position: { bottom: 32, left: 24 },
-  },
-  {
-    id: '3',
-    name: 'Studio Mac',
-    deviceType: 'mac',
-    distance: '3.5m',
-    protocol: 'Wi-Fi 6E',
-    status: 'Wi-Fi 6E',
-    ip: '192.168.1.142',
-    position: { top: 32, left: 28 },
-  },
-  {
-    id: '4',
-    name: 'Workstation',
-    deviceType: 'windows',
-    distance: '5.0m',
-    protocol: '10GbE LAN',
-    status: 'Standby',
-    ip: '192.168.1.110',
-    position: { bottom: 28, right: 28 },
-  },
+const RADAR_POSITIONS: Array<{
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}> = [
+  { top: 28, left: 26 },
+  { top: 22, right: 30 },
+  { bottom: 28, left: 24 },
+  { bottom: 24, right: 26 },
 ];
 
 interface HomeScreenProps {
@@ -103,28 +74,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     peers: livePeers,
     selfDevice,
     freeStorageGB,
+    history,
+    engineConnected,
     rescanLAN,
   } = useDroplyStore();
   const [selectedPeer, setSelectedPeer] = useState<Peer | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  const displayedPeers: Peer[] =
-    livePeers.length > 0
-      ? livePeers.map((lp, idx) => ({
-          id: lp.device_id,
-          name: lp.device_name,
-          deviceType:
-            lp.device_type === 'ios'
-              ? 'android'
-              : (lp.device_type as Peer['deviceType']) || 'mac',
-          distance: lp.distance_hint || '1.2m',
-          protocol: lp.protocol_badge || '5GHz Direct',
-          status: lp.trusted ? 'Direct P2P' : 'Ready',
-          ip: lp.ip_address,
-          position: PEERS[idx % PEERS.length].position,
-        }))
-      : PEERS;
+  const displayedPeers: Peer[] = livePeers.map((lp, idx) => ({
+    id: lp.device_id,
+    name: lp.device_name,
+    deviceType:
+      lp.device_type === 'ios'
+        ? 'android'
+        : (lp.device_type as Peer['deviceType']) || 'mac',
+    distance: lp.distance_hint || 'LAN',
+    protocol: lp.protocol_badge || `:${lp.port}`,
+    status: lp.trusted ? 'Direct P2P' : 'Ready',
+    ip: lp.ip_address,
+    port: lp.port,
+    position: RADAR_POSITIONS[idx % RADAR_POSITIONS.length],
+  }));
+
+  const totalTransferredToday = history.reduce(
+    (sum, h) => sum + (h.total_size_bytes || 0),
+    0
+  );
 
   // Radar pulse animations
   const pulseAnim1 = useRef(new Animated.Value(0.6)).current;
@@ -308,61 +284,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             ]}
           />
 
-          {/* Peer Node 1: Alex's Galaxy S24 */}
-          <TouchableOpacity
-            style={[styles.peerNode, { top: 22, right: 30 }]}
-            onPress={() => handleSelectPeer(PEERS[0])}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.peerIconWrapper, selectedPeer?.id === '1' && styles.peerSelected]}>
-              <Smartphone size={20} color={colors.primary} />
-              <View style={styles.peerOnlineDot} />
-            </View>
-            <Text style={styles.peerLabel}>Alex's S24</Text>
-            <Text style={styles.peerDistance}>1.2m</Text>
-          </TouchableOpacity>
-
-          {/* Peer Node 2: iPad Pro M4 */}
-          <TouchableOpacity
-            style={[styles.peerNode, { bottom: 28, left: 24 }]}
-            onPress={() => handleSelectPeer(PEERS[1])}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.peerIconWrapper, selectedPeer?.id === '2' && styles.peerSelected]}>
-              <Tablet size={20} color={colors.tertiary} />
-              <View style={styles.peerOnlineDot} />
-            </View>
-            <Text style={styles.peerLabel}>iPad Pro M4</Text>
-            <Text style={styles.peerDistance}>2.0m</Text>
-          </TouchableOpacity>
-
-          {/* Peer Node 3: Studio Mac */}
-          <TouchableOpacity
-            style={[styles.peerNode, { top: 28, left: 26 }]}
-            onPress={() => handleSelectPeer(PEERS[2])}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.peerIconWrapper, selectedPeer?.id === '3' && styles.peerSelected]}>
-              <Laptop size={19} color={colors.onSurface} />
-              <View style={styles.peerOnlineDot} />
-            </View>
-            <Text style={styles.peerLabel}>Studio Mac</Text>
-            <Text style={styles.peerDistanceSub}>3.5m • 6GHz</Text>
-          </TouchableOpacity>
-
-          {/* Peer Node 4: Workstation */}
-          <TouchableOpacity
-            style={[styles.peerNode, { bottom: 24, right: 26 }]}
-            onPress={() => handleSelectPeer(PEERS[3])}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.peerIconWrapper, selectedPeer?.id === '4' && styles.peerSelected]}>
-              <Monitor size={19} color={colors.secondary} />
-              <View style={styles.peerOnlineDot} />
-            </View>
-            <Text style={styles.peerLabel}>Workstation</Text>
-            <Text style={styles.peerDistanceSub}>5.0m</Text>
-          </TouchableOpacity>
+          {/* Live Discovered Peer Nodes on Radar */}
+          {displayedPeers.slice(0, 4).map((peer) => (
+            <TouchableOpacity
+              key={peer.id}
+              style={[styles.peerNode, peer.position]}
+              onPress={() => handleSelectPeer(peer)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.peerIconWrapper,
+                  selectedPeer?.id === peer.id && styles.peerSelected,
+                ]}
+              >
+                {renderDeviceIcon(peer.deviceType, colors.primary, 20)}
+                <View style={styles.peerOnlineDot} />
+              </View>
+              <Text style={styles.peerLabel} numberOfLines={1}>
+                {peer.name}
+              </Text>
+              <Text style={styles.peerDistance}>
+                {peer.ip}:{peer.port}
+              </Text>
+            </TouchableOpacity>
+          ))}
 
           {/* Center Host Badge (You) */}
           <View style={styles.centerHost}>
@@ -372,7 +318,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </View>
             <View style={styles.hostChip}>
               <Text style={styles.hostChipYou}>You</Text>
-              <Text style={styles.hostChipDevice}>• iPhone 15 Pro</Text>
+              <Text style={styles.hostChipDevice}>
+                • {selfDevice?.device_name || 'Connecting...'}
+              </Text>
             </View>
           </View>
         </View>
@@ -382,7 +330,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Send Files */}
           <TouchableOpacity
             style={[styles.actionCard, styles.actionCardPrimary]}
-            onPress={() => onNavigateToSend && onNavigateToSend(selectedPeer || PEERS[0])}
+            onPress={() =>
+              onNavigateToSend &&
+              onNavigateToSend(selectedPeer || displayedPeers[0])
+            }
             activeOpacity={0.85}
           >
             <View style={styles.actionIconPrimary}>
@@ -511,11 +462,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <View style={styles.telemetryStatsRow}>
             <View style={styles.telemetryStat}>
               <ArrowDown size={14} color="#059669" />
-              <Text style={styles.telemetryStatText}>8.4 GB transferred today</Text>
+              <Text style={styles.telemetryStatText}>
+                {formatBytes(totalTransferredToday)} transferred ({history.length} records)
+              </Text>
             </View>
             <View style={styles.telemetryStat}>
               <View style={styles.statDot} />
-              <Text style={styles.telemetryStatMono}>Zero encryption loss</Text>
+              <Text style={styles.telemetryStatMono}>
+                {engineConnected ? 'TLS 1.3 Go Engine Active' : 'Connecting Engine...'}
+              </Text>
             </View>
           </View>
         </View>

@@ -1,6 +1,7 @@
 import {
   DeviceInfo,
   QRPairingPayload,
+  RealFileEntry,
   RuntimeSettings,
   TransferHistoryEntry,
   TransferRecord,
@@ -56,6 +57,22 @@ class DroplyEngineClient {
   async listPeers(): Promise<DeviceInfo[]> {
     const data = await this.request<{ peers: DeviceInfo[] }>('/peers');
     return data.peers || [];
+  }
+
+  async listLocalFiles(): Promise<RealFileEntry[]> {
+    const data = await this.request<{ files: RealFileEntry[] }>('/files');
+    return data.files || [];
+  }
+
+  async uploadFileContent(fileName: string, content: string): Promise<RealFileEntry> {
+    return this.request<RealFileEntry>('/files/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-File-Name': fileName,
+      },
+      body: content,
+    });
   }
 
   async rescanPeers(): Promise<DeviceInfo[]> {

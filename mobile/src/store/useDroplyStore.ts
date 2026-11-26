@@ -3,6 +3,7 @@ import {
   ConnectionState,
   DeviceInfo,
   QRPairingPayload,
+  RealFileEntry,
   RuntimeSettings,
   TransferHistoryEntry,
   TransferRecord,
@@ -15,6 +16,7 @@ interface DroplyStoreState {
   connectionState: ConnectionState;
   selfDevice: DeviceInfo | null;
   peers: DeviceInfo[];
+  localFiles: RealFileEntry[];
   activePairing: QRPairingPayload | null;
   qrPayloadString: string;
   transfers: TransferRecord[];
@@ -30,13 +32,14 @@ let globalState: DroplyStoreState = {
   connectionState: 'Discovering',
   selfDevice: null,
   peers: [],
+  localFiles: [],
   activePairing: null,
   qrPayloadString: '',
   transfers: [],
   history: [],
   trustedDevices: [],
   settings: null,
-  freeStorageGB: 142.8,
+  freeStorageGB: 0,
   lastError: null,
 };
 
@@ -49,16 +52,20 @@ function setGlobalState(partial: Partial<DroplyStoreState>) {
 
 export async function syncWithGoEngine(): Promise<boolean> {
   try {
-    const [status, peers, txData, history, trusted] = await Promise.all([
+    const [status, peers, localFiles, txData, history, trusted] = await Promise.all([
       droplyEngine.getStatus(),
       droplyEngine.listPeers(),
+      droplyEngine.listLocalFiles(),
       droplyEngine.listTransfers(),
       droplyEngine.listHistory(),
       droplyEngine.listTrustedDevices(),
     ]);
 
     const activeTx = (txData.transfers || []).some(
-      (t) => t.status === 'Transferring' || t.status === 'Preparing' || t.status === 'Verifying'
+      (t) =>
+        t.status === 'Transferring' ||
+        t.status === 'Preparing' ||
+        t.status === 'Verifying'
     );
 
     setGlobalState({
@@ -66,10 +73,11 @@ export async function syncWithGoEngine(): Promise<boolean> {
       connectionState: activeTx ? 'Transferring' : 'Connected',
       selfDevice: status.self,
       settings: status.settings,
-      freeStorageGB: status.free_gb ? Number(status.free_gb.toFixed(1)) : 142.8,
+      freeStorageGB: status.free_gb ? Number(status.free_gb.toFixed(1)) : 0,
       activePairing: status.active_pairing,
       qrPayloadString: status.qr_payload_str || '',
       peers,
+      localFiles,
       transfers: txData.transfers || [],
       history,
       trustedDevices: trusted,
@@ -104,6 +112,12 @@ export function useDroplyStore() {
     } catch {
       await syncWithGoEngine();
     }
+  }, []);
+
+  const createRealNoteFile = useCallback(async (fileName: string, content: string) => {
+    const created = await droplyEngine.uploadFileContent(fileName, content);
+    await syncWithGoEngine();
+    return created;
   }, []);
 
   const refreshPairingSession = useCallback(async () => {
@@ -198,6 +212,7 @@ export function useDroplyStore() {
     ...state,
     syncWithGoEngine,
     rescanLAN,
+    createRealNoteFile,
     refreshPairingSession,
     pairWithQR,
     pairWithManualEndpoint,

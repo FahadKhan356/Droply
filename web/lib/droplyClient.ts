@@ -15,6 +15,19 @@ export interface DaemonPeer {
   protocol_badge?: string;
 }
 
+export interface RealFileEntry {
+  id: string;
+  name: string;
+  type: 'photo' | 'video' | 'doc' | 'audio' | 'archive' | 'sheet';
+  tag: string;
+  ext: string;
+  size_str: string;
+  size_bytes: number;
+  date_str: string;
+  color_bg: string;
+  source_path: string;
+}
+
 export interface DaemonTransfer {
   transfer_id: string;
   direction: 'send' | 'receive';
@@ -34,6 +47,21 @@ export interface DaemonTransfer {
   status: string;
 }
 
+export interface DaemonHistoryEntry {
+  transfer_id: string;
+  direction: 'send' | 'receive';
+  peer_device_id: string;
+  peer_device_name: string;
+  peer_ip: string;
+  peer_port: number;
+  file_names: string[];
+  total_size_bytes: number;
+  duration_seconds: number;
+  average_speed_mbps: number;
+  status: string;
+  timestamp: string;
+}
+
 export async function fetchDaemonStatus() {
   const res = await fetch(`${DAEMON_API_URL}/status`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Daemon unreachable');
@@ -45,6 +73,42 @@ export async function fetchDaemonPeers(): Promise<DaemonPeer[]> {
   if (!res.ok) throw new Error('Daemon unreachable');
   const data = await res.json();
   return data.peers || [];
+}
+
+export async function fetchDaemonFiles(): Promise<RealFileEntry[]> {
+  const res = await fetch(`${DAEMON_API_URL}/files`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to fetch local files');
+  const data = await res.json();
+  return data.files || [];
+}
+
+export async function uploadFileToDaemon(file: File): Promise<RealFileEntry> {
+  const res = await fetch(`${DAEMON_API_URL}/files/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'X-File-Name': file.name,
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error('Failed to stage file');
+  return res.json();
+}
+
+export async function fetchDaemonTransfers(): Promise<{
+  transfers: DaemonTransfer[];
+  history: DaemonHistoryEntry[];
+}> {
+  const [txRes, histRes] = await Promise.all([
+    fetch(`${DAEMON_API_URL}/transfers`, { cache: 'no-store' }),
+    fetch(`${DAEMON_API_URL}/history`, { cache: 'no-store' }),
+  ]);
+  const txData = txRes.ok ? await txRes.json() : { transfers: [] };
+  const histData = histRes.ok ? await histRes.json() : { history: [] };
+  return {
+    transfers: txData.transfers || [],
+    history: histData.history || [],
+  };
 }
 
 export async function triggerDaemonRescan(): Promise<DaemonPeer[]> {

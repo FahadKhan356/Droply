@@ -31,99 +31,9 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useDroplyStore } from '../store/useDroplyStore';
+import { formatBytes } from '../utils/formatters';
 
 const { width } = Dimensions.get('window');
-
-interface FileItem {
-  id: string;
-  name: string;
-  type: 'photo' | 'video' | 'doc' | 'audio' | 'archive' | 'sheet';
-  tag: string;
-  ext: string;
-  sizeStr: string;
-  sizeBytes: number;
-  dateStr: string;
-  duration?: string;
-  colorBg: string;
-  iconType: string;
-}
-
-const INITIAL_FILES: FileItem[] = [
-  {
-    id: '1',
-    name: 'IMG_4920_ProRAW.dng',
-    type: 'photo',
-    tag: 'RAW',
-    ext: 'DNG',
-    sizeStr: '48.2 MB',
-    sizeBytes: 48.2 * 1024 * 1024,
-    dateStr: 'Today, 14:20',
-    colorBg: '#dbeafe',
-    iconType: 'photo',
-  },
-  {
-    id: '2',
-    name: 'Project_Demo_4K.mov',
-    type: 'video',
-    tag: '4K 60FPS',
-    ext: 'MOV',
-    sizeStr: '412.0 MB',
-    sizeBytes: 412 * 1024 * 1024,
-    dateStr: 'Yesterday',
-    duration: '02:45',
-    colorBg: '#ede9fe',
-    iconType: 'video',
-  },
-  {
-    id: '3',
-    name: 'Brand_Guidelines_v3.pdf',
-    type: 'doc',
-    tag: '32 Pages',
-    ext: 'PDF',
-    sizeStr: '18.5 MB',
-    sizeBytes: 18.5 * 1024 * 1024,
-    dateStr: 'Oct 12',
-    colorBg: '#fee2e2',
-    iconType: 'pdf',
-  },
-  {
-    id: '4',
-    name: 'Voice_Memo_0812.m4a',
-    type: 'audio',
-    tag: 'HQ AUDIO',
-    ext: 'M4A',
-    sizeStr: '8.4 MB',
-    sizeBytes: 8.4 * 1024 * 1024,
-    dateStr: 'Oct 11',
-    duration: '04:12',
-    colorBg: '#fef3c7',
-    iconType: 'audio',
-  },
-  {
-    id: '5',
-    name: 'Design_Assets_Archive.zip',
-    type: 'archive',
-    tag: '240 ITEMS',
-    ext: 'ZIP',
-    sizeStr: '1.2 GB',
-    sizeBytes: 1200 * 1024 * 1024,
-    dateStr: 'Oct 9',
-    colorBg: '#e0e7ff',
-    iconType: 'zip',
-  },
-  {
-    id: '6',
-    name: 'Financial_Report_Q3.xlsx',
-    type: 'sheet',
-    tag: '8 SHEETS',
-    ext: 'XLSX',
-    sizeStr: '3.8 MB',
-    sizeBytes: 3.8 * 1024 * 1024,
-    dateStr: 'Oct 8',
-    colorBg: '#dcfce7',
-    iconType: 'sheet',
-  },
-];
 
 interface SendFilesScreenProps {
   recipient?: any;
@@ -136,27 +46,60 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
   onNavigateToTransfer,
   onBack,
 }) => {
-  const { startFileTransfer, selfDevice } = useDroplyStore();
-  const [selectedIds, setSelectedIds] = useState<string[]>(['1', '2', '3']);
+  const {
+    localFiles,
+    peers,
+    selfDevice,
+    startFileTransfer,
+    createRealNoteFile,
+    syncWithGoEngine,
+  } = useDroplyStore();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const targetPeerName =
+    recipient?.name ||
+    peers[0]?.device_name ||
+    selfDevice?.device_name ||
+    'Local Host';
+  const targetPeerId =
+    recipient?.id ||
+    peers[0]?.device_id ||
+    selfDevice?.device_id ||
+    'local_host';
+  const targetPeerIp =
+    recipient?.ip ||
+    peers[0]?.ip_address ||
+    selfDevice?.ip_address ||
+    '127.0.0.1';
+  const targetPeerPort =
+    recipient?.port || peers[0]?.port || selfDevice?.port || 53317;
+
+  const handleAddRealFile = async () => {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const created = await createRealNoteFile(
+      `DROPly_Note_${ts}.txt`,
+      `DROPly Real P2P Payload created at ${new Date().toLocaleString()}\nHost: ${selfDevice?.device_name || 'DROPly'}\nIP: ${selfDevice?.ip_address || '127.0.0.1'}\n`
+    );
+    if (created?.id) {
+      setSelectedIds((prev) => [...prev, created.id]);
+    }
+  };
+
   const handleSendBlast = async () => {
-    const chosen = INITIAL_FILES.filter((f) => selectedIds.includes(f.id));
-    for (const file of chosen) {
-      try {
-        await startFileTransfer({
-          peer_id: recipient?.id || selfDevice?.device_id || 'local_peer',
-          peer_name: recipient?.name || "Alex's Galaxy S24",
-          peer_ip: recipient?.ip || '127.0.0.1',
-          synthetic_file: {
-            file_name: file.name,
-            size_bytes: Math.min(file.sizeBytes, 2 * 1024 * 1024),
-          },
-        });
-      } catch {
-        // Fallback if local daemon not reachable on mobile device
-      }
+    const chosen = localFiles.filter((f) => selectedIds.includes(f.id));
+    if (chosen.length === 0) return;
+    try {
+      await startFileTransfer({
+        peer_id: targetPeerId,
+        peer_name: targetPeerName,
+        peer_ip: targetPeerIp,
+        peer_port: targetPeerPort,
+        file_paths: chosen.map((f) => f.source_path),
+      });
+    } catch {
+      await syncWithGoEngine();
     }
     if (onNavigateToTransfer) {
       onNavigateToTransfer();
@@ -173,7 +116,14 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
     setSelectedIds([]);
   };
 
-  const filteredFiles = INITIAL_FILES.filter((file) => {
+  const photoCount = localFiles.filter((f) => f.type === 'photo').length;
+  const videoCount = localFiles.filter((f) => f.type === 'video').length;
+  const docCount = localFiles.filter(
+    (f) => f.type === 'doc' || f.type === 'sheet' || f.type === 'archive'
+  ).length;
+  const audioCount = localFiles.filter((f) => f.type === 'audio').length;
+
+  const filteredFiles = localFiles.filter((file) => {
     const matchesSearch = file.name
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
@@ -181,14 +131,17 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
     if (activeCategory === 'photos') return matchesSearch && file.type === 'photo';
     if (activeCategory === 'videos') return matchesSearch && file.type === 'video';
     if (activeCategory === 'docs')
-      return matchesSearch && (file.type === 'doc' || file.type === 'sheet');
+      return (
+        matchesSearch &&
+        (file.type === 'doc' || file.type === 'sheet' || file.type === 'archive')
+      );
     if (activeCategory === 'audio') return matchesSearch && file.type === 'audio';
     return matchesSearch;
   });
 
-  const selectedFiles = INITIAL_FILES.filter((f) => selectedIds.includes(f.id));
-  const totalSizeBytes = selectedFiles.reduce((acc, f) => acc + f.sizeBytes, 0);
-  const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(1);
+  const selectedFiles = localFiles.filter((f) => selectedIds.includes(f.id));
+  const totalSizeBytes = selectedFiles.reduce((acc, f) => acc + f.size_bytes, 0);
+  const totalSizeFormatted = formatBytes(totalSizeBytes);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -232,7 +185,11 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 Tap to pick files or drag across devices
               </Text>
             </View>
-            <TouchableOpacity style={styles.addFilesBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.addFilesBtn}
+              onPress={handleAddRealFile}
+              activeOpacity={0.7}
+            >
               <Plus size={20} color={colors.onSurfaceVariant} />
             </TouchableOpacity>
           </View>
@@ -272,7 +229,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 activeCategory === 'all' && styles.filterChipTextActive,
               ]}
             >
-              All
+              All ({localFiles.length})
             </Text>
           </TouchableOpacity>
 
@@ -297,7 +254,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 activeCategory === 'photos' && styles.filterChipTextActive,
               ]}
             >
-              Photos (124)
+              Photos ({photoCount})
             </Text>
           </TouchableOpacity>
 
@@ -322,7 +279,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 activeCategory === 'videos' && styles.filterChipTextActive,
               ]}
             >
-              Videos (18)
+              Videos ({videoCount})
             </Text>
           </TouchableOpacity>
 
@@ -347,7 +304,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 activeCategory === 'docs' && styles.filterChipTextActive,
               ]}
             >
-              Documents (45)
+              Documents ({docCount})
             </Text>
           </TouchableOpacity>
 
@@ -372,7 +329,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 activeCategory === 'audio' && styles.filterChipTextActive,
               ]}
             >
-              Audio (12)
+              Audio ({audioCount})
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -395,7 +352,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 <View
                   style={[
                     styles.thumbnailContainer,
-                    { backgroundColor: file.colorBg },
+                    { backgroundColor: file.color_bg || '#dbeafe' },
                   ]}
                 >
                   {/* Tag Badge */}
@@ -435,17 +392,9 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                     )}
                   </View>
 
-                  {/* Duration or Ext Badge */}
-                  {file.duration ? (
-                    <View style={styles.durationBadge}>
-                      <Play size={10} color="#ffffff" fill="#ffffff" />
-                      <Text style={styles.durationText}>{file.duration}</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.extBadge}>
-                      <Text style={styles.extText}>{file.ext}</Text>
-                    </View>
-                  )}
+                  <View style={styles.extBadge}>
+                    <Text style={styles.extText}>{file.ext}</Text>
+                  </View>
                 </View>
 
                 {/* File Metadata */}
@@ -460,9 +409,9 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                         isSelected && styles.fileSizeSelected,
                       ]}
                     >
-                      {file.sizeStr}
+                      {file.size_str}
                     </Text>
-                    <Text style={styles.fileDate}>{file.dateStr}</Text>
+                    <Text style={styles.fileDate}>{file.date_str}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -477,7 +426,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
         <View style={styles.recipientPill}>
           <Smartphone size={14} color={colors.primary} />
           <Text style={styles.recipientText} numberOfLines={1}>
-            To: {recipient?.name || "Alex's Galaxy S24"}
+            To: {targetPeerName} ({targetPeerIp})
           </Text>
           <View style={styles.p2pActiveDot} />
         </View>
@@ -488,7 +437,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
             <Text style={styles.stagingCountText}>
               {selectedIds.length} files selected
             </Text>
-            <Text style={styles.stagingSizeText}>• {totalSizeMB} MB total</Text>
+            <Text style={styles.stagingSizeText}>• {totalSizeFormatted} total</Text>
           </View>
 
           <View style={styles.actionButtonsRow}>

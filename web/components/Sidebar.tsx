@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { fetchDaemonStatus } from '../lib/droplyClient';
 import {
   Radio,
   Upload,
@@ -17,6 +18,17 @@ import {
 
 export const Sidebar: React.FC = () => {
   const pathname = usePathname();
+  const [freeGB, setFreeGB] = useState<string>('--');
+  const [localIP, setLocalIP] = useState<string>('127.0.0.1');
+
+  useEffect(() => {
+    fetchDaemonStatus()
+      .then((st) => {
+        if (st?.free_gb) setFreeGB(Number(st.free_gb).toFixed(1));
+        if (st?.self?.ip_address) setLocalIP(st.self.ip_address);
+      })
+      .catch(() => {});
+  }, []);
 
   const navItems = [
     { name: 'Home / Radar', href: '/', icon: Radio },
@@ -121,7 +133,7 @@ export const Sidebar: React.FC = () => {
             </span>
           </div>
           <span className="text-xs font-mono font-bold text-tertiary">
-            142.8 GB Free
+            {freeGB} GB Free
           </span>
         </div>
 
@@ -137,7 +149,7 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center justify-between text-[11px] text-on-surface-variant pt-0.5">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            192.168.1.142
+            {localIP}
           </span>
           <span className="font-medium text-primary">Ultra P2P</span>
         </div>

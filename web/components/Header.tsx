@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchDaemonStatus, fetchDaemonTransfers } from '../lib/droplyClient';
 import {
   Wifi,
   QrCode,
@@ -18,6 +19,26 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenQR, onOpenPIN }) => {
+  const [hostName, setHostName] = useState<string>('DROPly Host');
+  const [localIP, setLocalIP] = useState<string>('127.0.0.1');
+  const [activeCount, setActiveCount] = useState<number>(0);
+
+  useEffect(() => {
+    const refresh = () => {
+      fetchDaemonStatus()
+        .then((st) => {
+          if (st?.self?.device_name) setHostName(st.self.device_name);
+          if (st?.self?.ip_address) setLocalIP(st.self.ip_address);
+        })
+        .catch(() => {});
+      fetchDaemonTransfers()
+        .then((t) => setActiveCount((t.transfers || []).length))
+        .catch(() => {});
+    };
+    refresh();
+    const id = setInterval(refresh, 3000);
+    return () => clearInterval(id);
+  }, []);
   return (
     <header className="h-20 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-30 px-8 flex items-center justify-between">
       {/* Network pill & Status */}
@@ -29,15 +50,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenQR, onOpenPIN }) => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-on-surface">
-              Studio_Ultra_5G
+              {hostName}
             </span>
             <span className="w-1 h-1 rounded-full bg-slate-300"></span>
             <span className="text-xs font-mono text-on-surface-variant">
-              192.168.1.142
+              {localIP}
             </span>
           </div>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-            Wi-Fi 6E
+            TLS 1.3
           </span>
         </div>
       </div>
@@ -65,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenQR, onOpenPIN }) => {
         {/* Active Transfer Pill Indicator */}
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-fixed/60 text-primary text-xs font-bold">
           <Activity className="w-4 h-4 animate-pulse" />
-          <span>3 Active</span>
+          <span>{activeCount} Active</span>
         </div>
 
         {/* Notification Bell */}

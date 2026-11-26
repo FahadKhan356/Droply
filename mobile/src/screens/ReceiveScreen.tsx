@@ -32,37 +32,54 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useDroplyStore } from '../store/useDroplyStore';
-import { formatPIN } from '../utils/formatters';
+import { formatPIN, formatBytes } from '../utils/formatters';
 
 const { width } = Dimensions.get('window');
 
 interface ReceiveScreenProps {
   onBack?: () => void;
   onNavigateToTransfer?: () => void;
+  onAcceptTransfer?: () => void;
 }
 
 export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
   onBack,
   onNavigateToTransfer,
+  onAcceptTransfer,
 }) => {
   const {
+    selfDevice,
     activePairing,
+    qrPayloadString,
     transfers,
+    settings,
+    refreshPairingSession,
     approveIncomingTransfer,
     rejectIncomingTransfer,
     updateEngineSettings,
   } = useDroplyStore();
   const [activeTab, setActiveTab] = useState<'receive' | 'scan'>('receive');
   const [copiedPin, setCopiedPin] = useState(false);
-  const [trustedOnly, setTrustedOnly] = useState(true);
-  const [incomingRequest, setIncomingRequest] = useState<boolean>(true);
+  const [trustedOnly, setTrustedOnly] = useState(
+    settings?.auto_accept_paired ?? true
+  );
   const [isAccepting, setIsAccepting] = useState<boolean>(false);
   const [acceptedSuccess, setAcceptedSuccess] = useState<boolean>(false);
-  const [countdown, setCountdown] = useState<number>(272);
+  const [countdown, setCountdown] = useState<number>(300);
 
   const liveIncoming = transfers.find(
     (t) => t.direction === 'receive' && t.status === 'Waiting for Approval'
   );
+
+  useEffect(() => {
+    if (activePairing?.exp) {
+      const rem = Math.max(
+        0,
+        activePairing.exp - Math.floor(Date.now() / 1000)
+      );
+      setCountdown(rem);
+    }
+  }, [activePairing]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -85,19 +102,20 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
   };
 
   const handleAccept = async () => {
+    if (!liveIncoming) return;
     setIsAccepting(true);
-    if (liveIncoming) {
-      try {
-        await approveIncomingTransfer(liveIncoming.transfer_id);
-      } catch {}
-    }
-    setTimeout(() => {
+    try {
+      await approveIncomingTransfer(liveIncoming.transfer_id);
       setIsAccepting(false);
       setAcceptedSuccess(true);
       setTimeout(() => {
-        onNavigateToTransfer && onNavigateToTransfer();
-      }, 1200);
-    }, 1000);
+        setAcceptedSuccess(false);
+        if (onAcceptTransfer) onAcceptTransfer();
+        if (onNavigateToTransfer) onNavigateToTransfer();
+      }, 900);
+    } catch {
+      setIsAccepting(false);
+    }
   };
 
   const handleDecline = async () => {
@@ -106,7 +124,13 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
         await rejectIncomingTransfer(liveIncoming.transfer_id);
       } catch {}
     }
-    setIncomingRequest(false);
+  };
+
+  const handleToggleTrustedAutoAccept = async (val: boolean) => {
+    setTrustedOnly(val);
+    try {
+      await updateEngineSettings({ auto_accept_paired: val });
+    } catch {}
   };
 
   return (
@@ -194,13 +218,19 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
             </View>
             <View style={styles.deviceMeta}>
               <View style={styles.deviceNameRow}>
-                <Text style={styles.deviceName}>Elena's iPhone 15 Pro</Text>
-                <TouchableOpacity style={styles.editBtn}>
-                  <Edit2 size={13} color={colors.onSurfaceVariant} />
+                <Text style={styles.deviceName}>
+                  {selfDevice?.device_name || 'DROPly Node'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={refreshPairingSession}
+                >
+                  <RefreshCw size={13} color={colors.onSurfaceVariant} />
                 </TouchableOpacity>
               </View>
               <Text style={styles.deviceSub}>
-                Discoverable to everyone on 'Studio_Ultra_5G'
+                Listening on {selfDevice?.ip_address || '127.0.0.1'}:
+                {selfDevice?.port || 53317} (TLS 1.3)
               </Text>
             </View>
           </View>
@@ -264,17 +294,23 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
                 <View style={styles.qrMarkerInner} />
               </View>
 
-              {/* Data Matrix Dots Grid */}
+              {/* Data Matrix Dots Grid derived from real qrPayloadString */}
               <View style={styles.qrGrid}>
-                {Array.from({ length: 48 }).map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.qrPixel,
-                      (i % 2 === 0 || i % 5 === 0) && styles.qrPixelActive,
-                    ]}
-                  />
-                ))}
+                {Array.from({ length: 48 }).map((_, i) => {
+                  const code = qrPayloadString
+                    ? qrPayloadString.charCodeAt(i % qrPayloadString.length)
+                    : i;
+                  const active = (code + i) % 2 === 0;
+                  return (
+                    <View
+                      key={i}
+                      style={[
+                        styles.qrPixel,
+                        active && styles.qrPixelActive,
+                      ]}
+                    />
+                  );
+                })}
               </View>
 
               {/* Center Logo Node Pill */}
@@ -305,20 +341,20 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
           </View>
           <Switch
             value={trustedOnly}
-            onValueChange={setTrustedOnly}
+            onValueChange={handleToggleTrustedAutoAccept}
             trackColor={{ false: colors.surfaceDim, true: colors.primary }}
             thumbColor="#ffffff"
           />
         </View>
 
-        {/* Realistic Transfer Request Notification Sheet */}
-        {incomingRequest && (
+        {/* Real Incoming Transfer Request Notification Sheet (Only shown when a real transfer is waiting for approval) */}
+        {liveIncoming && (
           <View style={styles.incomingRequestSheet}>
             {acceptedSuccess ? (
               <View style={styles.successStateContainer}>
                 <CheckCircle2 size={24} color={colors.tertiary} />
                 <Text style={styles.successStateText}>
-                  Transfer complete! Saved to Downloads
+                  Transfer approved! Streaming to Downloads/DROPly
                 </Text>
               </View>
             ) : (
@@ -330,32 +366,28 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
                     </View>
                     <View>
                       <Text style={styles.senderName}>
-                        Marcus (Windows 11)
+                        {liveIncoming.sender.device_name} ({liveIncoming.sender.ip_address})
                       </Text>
                       <Text style={styles.senderMeta}>
-                        Incoming Transfer Request • 3 files (820 MB)
+                        Incoming Transfer Request • {liveIncoming.files.length} files (
+                        {formatBytes(liveIncoming.total_size)})
                       </Text>
                     </View>
                   </View>
                 </View>
 
-                {/* Previews of incoming files */}
+                {/* Previews of real incoming files */}
                 <View style={styles.previewThumbsRow}>
-                  <View style={styles.thumbBox}>
-                    <ImageIcon size={22} color={colors.primary} />
-                    <View style={styles.thumbExtBadge}>
-                      <Text style={styles.thumbExtText}>RAW</Text>
+                  {liveIncoming.files.slice(0, 3).map((fm) => (
+                    <View key={fm.file_id} style={styles.thumbBox}>
+                      <ImageIcon size={22} color={colors.primary} />
+                      <View style={styles.thumbExtBadge}>
+                        <Text style={styles.thumbExtText}>
+                          {(fm.extension || 'FILE').toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.thumbBox}>
-                    <Film size={22} color="#7c3aed" />
-                    <View style={styles.thumbExtBadge}>
-                      <Text style={styles.thumbExtText}>MOV</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.thumbBox, styles.thumbBoxGeneric]}>
-                    <Text style={styles.genericThumbText}>+1 More</Text>
-                  </View>
+                  ))}
                 </View>
 
                 {/* Action Buttons */}
@@ -385,7 +417,7 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
                           style={styles.spinIcon}
                         />
                         <Text style={styles.acceptText}>
-                          Downloading 820MB...
+                          Downloading {formatBytes(liveIncoming.total_size)}...
                         </Text>
                       </>
                     ) : (
