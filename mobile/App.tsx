@@ -16,6 +16,8 @@ import { ReceiveScreen } from './src/screens/ReceiveScreen';
 
 export type ScreenType = 'radar' | 'send' | 'transfer' | 'receive' | 'settings';
 
+import { registerRootComponent } from 'expo';
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('radar');
   const [activePeer, setActivePeer] = useState<any>(null);
@@ -278,3 +280,6 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
 });
+
+registerRootComponent(App);
+
