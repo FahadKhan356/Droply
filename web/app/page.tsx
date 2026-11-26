@@ -3,9 +3,7 @@
 import React, { useState } from 'react';
 import {
   Radio,
-  Sync,
   RefreshCw,
-  Broadcast,
   Laptop,
   Smartphone,
   Monitor,
