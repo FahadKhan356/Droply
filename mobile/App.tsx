@@ -12,6 +12,7 @@ import { colors } from './src/theme/colors';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SendFilesScreen } from './src/screens/SendFilesScreen';
 import { TransferScreen } from './src/screens/TransferScreen';
+import { ReceiveScreen } from './src/screens/ReceiveScreen';
 
 export type ScreenType = 'radar' | 'send' | 'transfer' | 'receive' | 'settings';
 
@@ -58,7 +59,13 @@ export default function App() {
             onFinish={() => setCurrentScreen('radar')}
           />
         )}
-        {currentScreen !== 'radar' && currentScreen !== 'send' && currentScreen !== 'transfer' && (
+        {currentScreen === 'receive' && (
+          <ReceiveScreen
+            onBack={() => setCurrentScreen('radar')}
+            onAcceptTransfer={() => setCurrentScreen('transfer')}
+          />
+        )}
+        {currentScreen !== 'radar' && currentScreen !== 'send' && currentScreen !== 'transfer' && currentScreen !== 'receive' && (
           <HomeScreen
             onNavigateToSend={handleNavigateToSend}
             onNavigateToReceive={handleNavigateToReceive}
