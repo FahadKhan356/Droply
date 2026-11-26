@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'between',
+    justifyContent: 'space-between',
     backgroundColor: 'rgba(248, 249, 255, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.04)',
