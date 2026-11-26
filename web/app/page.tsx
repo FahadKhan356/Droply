@@ -9,7 +9,7 @@ import {
   Laptop,
   Smartphone,
   Monitor,
-  FolderZip,
+  FolderArchive,
   Upload,
   FolderPlus,
   CheckCircle2,
@@ -319,7 +319,7 @@ export default function TransfersPage() {
                     style={{ animationDuration: '3s' }}
                   ></div>
                   <div className="w-16 h-16 rounded-2xl bg-primary-container text-white flex items-center justify-center shadow-lg shadow-primary/30 group-hover:scale-110 transition-transform">
-                    <FolderZip className="w-8 h-8 text-white" />
+                    <FolderArchive className="w-8 h-8 text-white" />
                   </div>
                   <span className="absolute -right-1 -top-1 w-6 h-6 rounded-full bg-tertiary text-white flex items-center justify-center shadow-sm">
                     <Zap className="w-3.5 h-3.5" />
