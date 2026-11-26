@@ -31,6 +31,8 @@ import {
   Image as ImageIcon,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { useDroplyStore } from '../store/useDroplyStore';
+import { formatPIN } from '../utils/formatters';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +45,13 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
   onBack,
   onNavigateToTransfer,
 }) => {
+  const {
+    activePairing,
+    transfers,
+    approveIncomingTransfer,
+    rejectIncomingTransfer,
+    updateEngineSettings,
+  } = useDroplyStore();
   const [activeTab, setActiveTab] = useState<'receive' | 'scan'>('receive');
   const [copiedPin, setCopiedPin] = useState(false);
   const [trustedOnly, setTrustedOnly] = useState(true);
@@ -50,6 +59,10 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
   const [isAccepting, setIsAccepting] = useState<boolean>(false);
   const [acceptedSuccess, setAcceptedSuccess] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(272);
+
+  const liveIncoming = transfers.find(
+    (t) => t.direction === 'receive' && t.status === 'Waiting for Approval'
+  );
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -71,18 +84,28 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
     }, 2000);
   };
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
     setIsAccepting(true);
+    if (liveIncoming) {
+      try {
+        await approveIncomingTransfer(liveIncoming.transfer_id);
+      } catch {}
+    }
     setTimeout(() => {
       setIsAccepting(false);
       setAcceptedSuccess(true);
       setTimeout(() => {
         onNavigateToTransfer && onNavigateToTransfer();
       }, 1200);
-    }, 1500);
+    }, 1000);
   };
 
-  const handleDecline = () => {
+  const handleDecline = async () => {
+    if (liveIncoming) {
+      try {
+        await rejectIncomingTransfer(liveIncoming.transfer_id);
+      } catch {}
+    }
     setIncomingRequest(false);
   };
 
@@ -186,7 +209,7 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
           <View style={styles.pinBox}>
             <View>
               <Text style={styles.pinLabel}>DIRECT PIN CODE</Text>
-              <Text style={styles.pinCode}>DROP · 8 9 2 4</Text>
+              <Text style={styles.pinCode}>{formatPIN(activePairing?.pin)}</Text>
             </View>
             <TouchableOpacity
               style={styles.copyPinBtn}

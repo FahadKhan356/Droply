@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchDaemonStatus, saveDaemonSettings } from '../../lib/droplyClient';
 import {
   RotateCcw,
   CheckCircle2,
@@ -46,6 +47,26 @@ export default function SettingsPage() {
   const [gatekeeperCheck, setGatekeeperCheck] = useState<boolean>(true);
   const [saveToast, setSaveToast] = useState<boolean>(false);
 
+  useEffect(() => {
+    fetchDaemonStatus()
+      .then((data) => {
+        if (data?.settings) {
+          const s = data.settings;
+          if (s.device_name) setDeviceLabel(s.device_name);
+          if (s.preset) setActivePreset(s.preset);
+          if (s.upload_rate_mbps) setUploadRate(s.upload_rate_mbps);
+          if (s.download_rate_mbps) setDownloadRate(s.download_rate_mbps);
+          if (s.parallel_streams) setStreams(s.parallel_streams);
+          if (s.listen_port) setListenPort(String(s.listen_port));
+          if (s.visibility) setVisibility(s.visibility);
+          if (typeof s.auto_accept_paired === 'boolean') {
+            setAutoAcceptPaired(s.auto_accept_paired);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handlePresetSelect = (preset: 'turbo' | 'balanced' | 'custom') => {
     setActivePreset(preset);
     if (preset === 'turbo') {
@@ -79,7 +100,19 @@ export default function SettingsPage() {
     setPinRotation(true);
   };
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
+    try {
+      await saveDaemonSettings({
+        device_name: deviceLabel,
+        preset: activePreset,
+        upload_rate_mbps: uploadRate,
+        download_rate_mbps: downloadRate,
+        parallel_streams: streams,
+        listen_port: Number(listenPort) || 53317,
+        visibility,
+        auto_accept_paired: autoAcceptPaired,
+      });
+    } catch {}
     setSaveToast(true);
     setTimeout(() => setSaveToast(false), 3500);
   };

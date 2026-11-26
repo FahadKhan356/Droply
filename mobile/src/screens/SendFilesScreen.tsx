@@ -30,6 +30,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { useDroplyStore } from '../store/useDroplyStore';
 
 const { width } = Dimensions.get('window');
 
@@ -135,9 +136,32 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
   onNavigateToTransfer,
   onBack,
 }) => {
+  const { startFileTransfer, selfDevice } = useDroplyStore();
   const [selectedIds, setSelectedIds] = useState<string[]>(['1', '2', '3']);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const handleSendBlast = async () => {
+    const chosen = INITIAL_FILES.filter((f) => selectedIds.includes(f.id));
+    for (const file of chosen) {
+      try {
+        await startFileTransfer({
+          peer_id: recipient?.id || selfDevice?.device_id || 'local_peer',
+          peer_name: recipient?.name || "Alex's Galaxy S24",
+          peer_ip: recipient?.ip || '127.0.0.1',
+          synthetic_file: {
+            file_name: file.name,
+            size_bytes: Math.min(file.sizeBytes, 2 * 1024 * 1024),
+          },
+        });
+      } catch {
+        // Fallback if local daemon not reachable on mobile device
+      }
+    }
+    if (onNavigateToTransfer) {
+      onNavigateToTransfer();
+    }
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) =>
@@ -483,7 +507,7 @@ export const SendFilesScreen: React.FC<SendFilesScreenProps> = ({
                 styles.sendBlastBtn,
                 selectedIds.length === 0 && styles.sendBlastBtnDisabled,
               ]}
-              onPress={() => onNavigateToTransfer && onNavigateToTransfer()}
+              onPress={handleSendBlast}
               disabled={selectedIds.length === 0}
               activeOpacity={0.85}
             >

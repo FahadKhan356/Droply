@@ -13,12 +13,14 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { SendFilesScreen } from './src/screens/SendFilesScreen';
 import { TransferScreen } from './src/screens/TransferScreen';
 import { ReceiveScreen } from './src/screens/ReceiveScreen';
+import { useDroplyEngine } from './src/hooks/useDroplyEngine';
 
 export type ScreenType = 'radar' | 'send' | 'transfer' | 'receive' | 'settings';
 
 import { registerRootComponent } from 'expo';
 
 export default function App() {
+  useDroplyEngine(2500);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('radar');
   const [activePeer, setActivePeer] = useState<any>(null);
 

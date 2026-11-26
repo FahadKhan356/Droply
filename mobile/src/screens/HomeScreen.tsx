@@ -30,6 +30,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { useDroplyStore } from '../store/useDroplyStore';
 
 const { width } = Dimensions.get('window');
 
@@ -98,9 +99,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToReceive,
   onNavigateToTransfer,
 }) => {
+  const {
+    peers: livePeers,
+    selfDevice,
+    freeStorageGB,
+    rescanLAN,
+  } = useDroplyStore();
   const [selectedPeer, setSelectedPeer] = useState<Peer | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+
+  const displayedPeers: Peer[] =
+    livePeers.length > 0
+      ? livePeers.map((lp, idx) => ({
+          id: lp.device_id,
+          name: lp.device_name,
+          deviceType:
+            lp.device_type === 'ios'
+              ? 'android'
+              : (lp.device_type as Peer['deviceType']) || 'mac',
+          distance: lp.distance_hint || '1.2m',
+          protocol: lp.protocol_badge || '5GHz Direct',
+          status: lp.trusted ? 'Direct P2P' : 'Ready',
+          ip: lp.ip_address,
+          position: PEERS[idx % PEERS.length].position,
+        }))
+      : PEERS;
 
   // Radar pulse animations
   const pulseAnim1 = useRef(new Animated.Value(0.6)).current;
@@ -169,11 +193,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }, 5000);
   };
 
-  const handleRescan = () => {
+  const handleRescan = async () => {
     setIsScanning(true);
+    await rescanLAN();
     setTimeout(() => {
       setIsScanning(false);
-    }, 1500);
+    }, 1000);
   };
 
   const spin = rotateAnim.interpolate({
@@ -243,7 +268,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <View style={styles.networkRow}>
                 <Text style={styles.networkSsid}>Studio_Ultra_5G</Text>
                 <View style={styles.dotSeparator} />
-                <Text style={styles.ipAddress}>192.168.1.142</Text>
+                <Text style={styles.ipAddress}>
+                  {selfDevice?.ip_address || '192.168.1.142'}
+                </Text>
               </View>
               <Text style={styles.p2pStatus}>Direct P2P Link Active</Text>
             </View>
@@ -394,7 +421,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>Nearby Peers</Text>
             <View style={styles.foundBadge}>
-              <Text style={styles.foundBadgeText}>4 Found</Text>
+              <Text style={styles.foundBadgeText}>{displayedPeers.length} Found</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -417,7 +444,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.carouselContainer}
         >
-          {PEERS.map((peer) => (
+          {displayedPeers.map((peer) => (
             <View key={peer.id} style={styles.deviceCard}>
               <View style={styles.deviceCardTop}>
                 <View style={styles.deviceCardIconBg}>
@@ -472,7 +499,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <HardDrive size={18} color={colors.primary} />
               <Text style={styles.telemetryTitle}>Local Storage</Text>
             </View>
-            <Text style={styles.telemetryFree}>142 GB Free</Text>
+            <Text style={styles.telemetryFree}>{Math.round(freeStorageGB || 142)} GB Free</Text>
           </View>
 
           {/* Dual bar progress meter */}

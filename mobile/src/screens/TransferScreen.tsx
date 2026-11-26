@@ -35,6 +35,7 @@ import {
   Droplet,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
+import { useTransfer } from '../features/transfer/useTransfer';
 
 interface TransferScreenProps {
   onBack?: () => void;
@@ -45,11 +46,28 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
   onBack,
   onFinish,
 }) => {
+  const {
+    activeTransfer,
+    pauseActiveTransfer,
+    resumeActiveTransfer,
+    cancelActiveTransfer,
+  } = useTransfer();
   const [isPaused, setIsPaused] = useState(false);
   const [keepAwake, setKeepAwake] = useState(true);
   const [progress, setProgress] = useState(68);
   const [speed, setSpeed] = useState(84.5);
   const [activeFileProgress, setActiveFileProgress] = useState(72);
+
+  useEffect(() => {
+    if (activeTransfer) {
+      setProgress(Math.round(activeTransfer.progress_percent || 0));
+      setActiveFileProgress(Math.round(activeTransfer.progress_percent || 0));
+      if (activeTransfer.current_speed_mbps > 0) {
+        setSpeed(Number(activeTransfer.current_speed_mbps.toFixed(1)));
+      }
+      setIsPaused(activeTransfer.status === 'Paused');
+    }
+  }, [activeTransfer]);
 
   // Flow animation between devices
   const flowAnim = useRef(new Animated.Value(0)).current;
@@ -82,8 +100,16 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
     return () => clearInterval(interval);
   }, [isPaused]);
 
-  const handleTogglePause = () => {
-    setIsPaused((prev) => !prev);
+  const handleTogglePause = async () => {
+    const nextPaused = !isPaused;
+    setIsPaused(nextPaused);
+    if (activeTransfer) {
+      if (nextPaused) {
+        await pauseActiveTransfer(activeTransfer.transfer_id);
+      } else {
+        await resumeActiveTransfer(activeTransfer.transfer_id);
+      }
+    }
   };
 
   const handleCancelTransfer = () => {
@@ -95,7 +121,12 @@ export const TransferScreen: React.FC<TransferScreenProps> = ({
         {
           text: 'Cancel',
           style: 'destructive',
-          onPress: () => onBack && onBack(),
+          onPress: async () => {
+            if (activeTransfer) {
+              await cancelActiveTransfer(activeTransfer.transfer_id);
+            }
+            if (onBack) onBack();
+          },
         },
       ]
     );
