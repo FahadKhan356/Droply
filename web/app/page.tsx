@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   DAEMON_API_URL,
   getDaemonApiUrl,
@@ -76,6 +76,7 @@ export default function TransfersPage() {
   const [peersList, setPeersList] = useState<PeerNode[]>([]);
   const [liveTransfers, setLiveTransfers] = useState<DaemonTransfer[]>([]);
   const [historyList, setHistoryList] = useState<DaemonHistoryEntry[]>([]);
+  const dropInputRef = useRef<HTMLInputElement>(null);
 
   const loadAllRealData = useCallback(async () => {
     try {
@@ -208,11 +209,15 @@ export default function TransfersPage() {
   const handleFilesPicked = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const uploaded: RealFileEntry[] = [];
+    setToastMessage(`Processing ${fileList.length} file(s)...`);
     for (let i = 0; i < fileList.length; i++) {
       try {
         const entry = await uploadFileToDaemon(fileList[i]);
         uploaded.push(entry);
-      } catch {}
+      } catch (err: any) {
+        console.error('File upload error:', err);
+        setToastMessage(`Failed to stage ${fileList[i].name}: ${err?.message || 'Error'}`);
+      }
     }
     if (uploaded.length > 0) {
       setStagedFiles((prev) => [...uploaded, ...prev]);
@@ -479,7 +484,10 @@ export default function TransfersPage() {
                       type="file"
                       multiple
                       className="hidden"
-                      onChange={(e) => handleFilesPicked(e.target.files)}
+                      onChange={(e) => {
+                        handleFilesPicked(e.target.files);
+                        e.target.value = '';
+                      }}
                     />
                   </label>
                   <label className="cursor-pointer h-11 px-5 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-bold flex items-center gap-2 transition-all active:scale-95 border border-slate-200/60">
@@ -489,7 +497,10 @@ export default function TransfersPage() {
                       type="file"
                       multiple
                       className="hidden"
-                      onChange={(e) => handleFilesPicked(e.target.files)}
+                      onChange={(e) => {
+                        handleFilesPicked(e.target.files);
+                        e.target.value = '';
+                      }}
                     />
                   </label>
                 </div>

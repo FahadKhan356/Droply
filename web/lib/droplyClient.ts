@@ -93,15 +93,16 @@ export async function fetchDaemonFiles(): Promise<RealFileEntry[]> {
 }
 
 export async function uploadFileToDaemon(file: File): Promise<RealFileEntry> {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
   const res = await fetch(`${getDaemonApiUrl()}/files/upload`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'X-File-Name': file.name,
-    },
-    body: file,
+    body: formData,
   });
-  if (!res.ok) throw new Error('Failed to stage file');
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(`Failed to stage file: ${res.status} ${errorText}`);
+  }
   return res.json();
 }
 

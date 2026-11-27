@@ -244,7 +244,7 @@ func withCORS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-File-Name, *")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -367,26 +367,34 @@ func (n *DroplyNode) startControlServer(bindAddr string) error {
 		defer r.Body.Close()
 
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-			if err := r.ParseMultipartForm(64 << 20); err == nil && r.MultipartForm != nil {
-				for _, fheaders := range r.MultipartForm.File {
-					if len(fheaders) > 0 {
-						fh := fheaders[0]
-						rawName = fh.Filename
-						f, err := fh.Open()
-						if err == nil {
-							defer f.Close()
-							reader = f
+			if err := r.ParseMultipartForm(512 << 20); err == nil && r.MultipartForm != nil {
+				if f, fh, err := r.FormFile("file"); err == nil {
+					defer f.Close()
+					rawName = fh.Filename
+					reader = f
+				} else {
+					for _, fheaders := range r.MultipartForm.File {
+						if len(fheaders) > 0 {
+							fh := fheaders[0]
+							rawName = fh.Filename
+							if fObj, err := fh.Open(); err == nil {
+								defer fObj.Close()
+								reader = fObj
+							}
+							break
 						}
-						break
 					}
 				}
 			}
 		}
 
+		if rawName == "" {
+			rawName = fmt.Sprintf("upload_%d.bin", time.Now().Unix())
+		}
+
 		safeName, err := security.SanitizeFilename(rawName)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			safeName = fmt.Sprintf("upload_%d.bin", time.Now().Unix())
 		}
 		destPath := filepath.Join(outboundDir, safeName)
 		outFile, err := os.Create(destPath)
@@ -408,6 +416,24 @@ func (n *DroplyNode) startControlServer(bindAddr string) error {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(entry)
+	}))
+
+	mux.HandleFunc("/api/v1/files/download", withCORS(func(w http.ResponseWriter, r *http.Request) {
+		filePath := r.URL.Query().Get("path")
+		if filePath == "" {
+			http.Error(w, "missing path parameter", http.StatusBadRequest)
+			return
+		}
+		cleanPath := filepath.Clean(filePath)
+		info, err := os.Stat(cleanPath)
+		if err != nil || info.IsDir() {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+		fileName := filepath.Base(cleanPath)
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, cleanPath)
 	}))
 
 	mux.HandleFunc("/api/v1/peers/manual", withCORS(func(w http.ResponseWriter, r *http.Request) {
