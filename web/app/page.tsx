@@ -43,6 +43,7 @@ import {
   Video,
   FileArchive,
   Download,
+  Music,
 } from 'lucide-react';
 
 interface PeerNode {
@@ -545,9 +546,9 @@ export default function TransfersPage() {
               </div>
 
               <div className="flex flex-col gap-3 mt-4">
-                {stagedFiles.map((file) => (
+                {stagedFiles.map((file, idx) => (
                   <div
-                    key={file.id}
+                    key={`${file.id}-${idx}`}
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-surface-container-low/70 hover:bg-surface-container-high/40 transition-colors gap-4 border border-slate-200/40"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
@@ -556,6 +557,8 @@ export default function TransfersPage() {
                           <Video className="w-5 h-5 text-white" />
                         ) : file.type === 'archive' ? (
                           <FileArchive className="w-5 h-5 text-white" />
+                        ) : file.type === 'audio' ? (
+                          <Music className="w-5 h-5 text-white" />
                         ) : (
                           <FileText className="w-5 h-5 text-white" />
                         )}
@@ -576,6 +579,16 @@ export default function TransfersPage() {
                     </div>
 
                     <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <a
+                        href={`${getDaemonApiUrl()}/files/download?path=${encodeURIComponent(file.source_path)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        download={file.name}
+                        className="h-8 px-3 rounded-full bg-white hover:bg-surface-container text-primary text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200/60 shadow-xs"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download / Play</span>
+                      </a>
                       <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full shadow-xs border border-slate-200/60">
                         <ArrowRight className="w-3.5 h-3.5 text-tertiary" />
                         <span className="text-xs text-on-surface-variant font-medium">

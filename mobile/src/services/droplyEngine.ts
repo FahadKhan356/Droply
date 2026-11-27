@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import {
   DeviceInfo,
   QRPairingPayload,
@@ -8,7 +9,18 @@ import {
   TrustedDevice,
 } from '../types/droply';
 
-const DEFAULT_ENGINE_URL = 'http://127.0.0.1:53318/api/v1';
+function getEngineHost(): string {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+      return `http://${ip}:53318/api/v1`;
+    }
+  }
+  return 'http://192.168.0.46:53318/api/v1';
+}
+
+const DEFAULT_ENGINE_URL = getEngineHost();
 
 class DroplyEngineClient {
   private baseUrl: string = DEFAULT_ENGINE_URL;
