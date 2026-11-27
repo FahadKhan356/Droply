@@ -33,9 +33,9 @@ export default function RootLayout({
         <Sidebar />
 
         {/* Main Application Area */}
-        <div className="flex-1 ml-72 flex flex-col min-w-0">
+        <div className="flex-1 ml-0 lg:ml-72 flex flex-col min-w-0">
           <Header />
-          <main className="flex-1 p-8 min-w-0">{children}</main>
+          <main className="flex-1 p-4 md:p-8 min-w-0">{children}</main>
         </div>
       </body>
     </html>

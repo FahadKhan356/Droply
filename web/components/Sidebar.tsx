@@ -43,7 +43,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-72 bg-white/95 backdrop-blur-xl z-40 flex flex-col justify-between border-r border-slate-200/80 shadow-[0_1px_16px_rgba(11,28,48,0.03)]">
+    <aside className="hidden lg:flex fixed left-0 top-0 h-full w-72 bg-white/95 backdrop-blur-xl z-40 flex-col justify-between border-r border-slate-200/80 shadow-[0_1px_16px_rgba(11,28,48,0.03)]">
       <div className="flex flex-col">
         {/* Brand Header */}
         <div className="h-20 px-6 flex items-center justify-between border-b border-slate-100">

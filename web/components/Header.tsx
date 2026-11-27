@@ -40,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenQR, onOpenPIN }) => {
     return () => clearInterval(id);
   }, []);
   return (
-    <header className="h-20 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-30 px-8 flex items-center justify-between">
+    <header className="h-20 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-30 px-4 md:px-8 flex items-center justify-between">
       {/* Network pill & Status */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-surface-container-low border border-slate-200/60">
