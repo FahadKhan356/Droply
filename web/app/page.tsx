@@ -295,7 +295,7 @@ export default function TransfersPage() {
         {/* ================= COLUMN 1 & 2: CENTER / STAGING & RADAR (8 COLS) ================= */}
         <div className="xl:col-span-8 flex flex-col gap-8">
           {/* RADAR & PEER DISCOVERY BANNER */}
-          <section className="relative overflow-hidden rounded-3xl bg-white/90 backdrop-blur-xl p-8 border border-slate-200/80 shadow-sm">
+          <section id="radar" className="relative overflow-hidden rounded-3xl bg-white/90 backdrop-blur-xl p-8 border border-slate-200/80 shadow-sm">
             <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-primary-container/10 blur-3xl pointer-events-none"></div>
             <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-tertiary-fixed-dim/20 blur-3xl pointer-events-none"></div>
 
@@ -412,7 +412,7 @@ export default function TransfersPage() {
             </div>
 
             {/* Fast Pairing Bar */}
-            <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-surface-container-low/90 px-5 py-3">
+            <div id="pair-qr" className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-surface-container-low/90 px-5 py-3">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">
@@ -757,7 +757,17 @@ export default function TransfersPage() {
                       <Lock className="w-3 h-3 text-tertiary" />
                       TLS 1.3 Stream
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
+                      {tx.status === 'Waiting for Approval' && (
+                        <button
+                          onClick={() =>
+                            controlDaemonTransfer('approve', tx.transfer_id).then(loadAllRealData)
+                          }
+                          className="px-3 py-1 rounded-full bg-primary hover:bg-primary-container text-white text-xs font-bold transition-all shadow-xs"
+                        >
+                          Accept & Stream
+                        </button>
+                      )}
                       <button
                         onClick={() =>
                           controlDaemonTransfer(

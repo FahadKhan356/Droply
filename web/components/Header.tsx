@@ -66,16 +66,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenQR, onOpenPIN }) => {
       {/* Quick Action Buttons & Profile */}
       <div className="flex items-center gap-3">
         <button
-          onClick={onOpenQR}
-          className="h-10 px-4 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold flex items-center gap-2 transition-all active:scale-95"
+          onClick={() => {
+            onOpenQR?.();
+            document.getElementById('pair-qr')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="h-10 px-4 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
         >
           <QrCode className="w-4 h-4 text-primary" />
           <span>Pair QR</span>
         </button>
 
         <button
-          onClick={onOpenPIN}
-          className="h-10 px-4 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold flex items-center gap-2 transition-all active:scale-95"
+          onClick={() => {
+            onOpenPIN?.();
+            document.getElementById('pair-qr')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="h-10 px-4 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
         >
           <KeyRound className="w-4 h-4 text-primary" />
           <span>Direct PIN</span>
@@ -84,10 +90,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenQR, onOpenPIN }) => {
         <div className="h-6 w-px bg-slate-200 mx-1"></div>
 
         {/* Active Transfer Pill Indicator */}
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-fixed/60 text-primary text-xs font-bold">
+        <button
+          onClick={() => {
+            document.getElementById('transfers')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-fixed/60 hover:bg-primary-fixed text-primary text-xs font-bold transition-all cursor-pointer active:scale-95"
+        >
           <Activity className="w-4 h-4 animate-pulse" />
           <span>{activeCount} Active</span>
-        </div>
+        </button>
 
         {/* Notification Bell */}
         <button className="w-10 h-10 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors relative">

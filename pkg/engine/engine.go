@@ -137,10 +137,11 @@ func NewNode(opts Options) (*DroplyNode, error) {
 			ParallelStreams:  4,
 			ListenPort:       opts.TransferPort,
 			Visibility:       "everyone",
-			AutoAcceptPaired: false,
+			AutoAcceptPaired: true,
 			DownloadDir:      opts.DownloadDir,
 		},
 	}
+	devMgr.SetAutoAcceptTrusted(true)
 
 	txEng := transfer.NewEngine(transfer.Config{
 		DeviceMgr:   devMgr,

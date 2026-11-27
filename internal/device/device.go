@@ -183,8 +183,14 @@ func (m *Manager) IsTrusted(deviceID, tlsFingerprint string) bool {
 // ShouldAutoAccept determines if an incoming transfer from a verified peer can auto-start
 // Note: Even trusted devices must pass pairing/session validation first.
 func (m *Manager) ShouldAutoAccept(deviceID, tlsFingerprint string) bool {
+	if deviceID == m.Self().DeviceID {
+		return true
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if m.autoAcceptAllTrusted {
+		return true
+	}
 	td, ok := m.trusted[deviceID]
 	if !ok {
 		return false
@@ -192,7 +198,7 @@ func (m *Manager) ShouldAutoAccept(deviceID, tlsFingerprint string) bool {
 	if tlsFingerprint != "" && td.TLSFingerprint != "" && td.TLSFingerprint != tlsFingerprint {
 		return false
 	}
-	return m.autoAcceptAllTrusted || td.AutoAccept
+	return td.AutoAccept
 }
 
 // RenameTrusted updates a trusted device's friendly alias

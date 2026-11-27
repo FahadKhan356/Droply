@@ -20,6 +20,7 @@ export const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const [freeGB, setFreeGB] = useState<string>('--');
   const [localIP, setLocalIP] = useState<string>('127.0.0.1');
+  const [activeSection, setActiveSection] = useState<string>('radar');
 
   useEffect(() => {
     fetchDaemonStatus()
@@ -28,13 +29,24 @@ export const Sidebar: React.FC = () => {
         if (st?.self?.ip_address) setLocalIP(st.self.ip_address);
       })
       .catch(() => {});
+
+    const handleHash = () => {
+      const h = window.location.hash;
+      if (h === '#dropzone') setActiveSection('dropzone');
+      else if (h === '#pair-qr') setActiveSection('pair-qr');
+      else if (h === '#transfers') setActiveSection('transfers');
+      else setActiveSection('radar');
+    };
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
   const navItems = [
-    { name: 'Home / Radar', href: '/', icon: Radio },
-    { name: 'Send Files', href: '/#dropzone', icon: Upload },
-    { name: 'Receive & QR', href: '/#pair-qr', icon: QrCode },
-    { name: 'Transfer History', href: '/#transfers', icon: History },
+    { name: 'Home / Radar', id: 'radar', href: '/', icon: Radio },
+    { name: 'Send Files', id: 'dropzone', href: '/#dropzone', icon: Upload },
+    { name: 'Receive & QR', id: 'pair-qr', href: '/#pair-qr', icon: QrCode },
+    { name: 'Transfer History', id: 'transfers', href: '/#transfers', icon: History },
   ];
 
   const topologyItems = [
@@ -73,15 +85,25 @@ export const Sidebar: React.FC = () => {
           <nav className="flex flex-col gap-1">
             {navItems.map((item) => {
               const isActive =
-                item.href === '/'
-                  ? pathname === '/'
-                  : pathname.startsWith(item.href);
+                pathname === '/' && activeSection === item.id;
               const Icon = item.icon;
               return (
-                <Link
+                <a
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+                  onClick={(e) => {
+                    if (pathname === '/') {
+                      e.preventDefault();
+                      setActiveSection(item.id);
+                      window.location.hash = item.id === 'radar' ? '' : item.id;
+                      if (item.id === 'radar') {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      } else {
+                        document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }
+                  }}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all cursor-pointer ${
                     isActive
                       ? 'bg-primary-container text-white font-semibold shadow-sm shadow-primary/20'
                       : 'text-on-surface-variant hover:bg-surface-container-high/60 hover:text-on-surface'
@@ -89,7 +111,7 @@ export const Sidebar: React.FC = () => {
                 >
                   <Icon className="w-5 h-5 shrink-0" />
                   <span>{item.name}</span>
-                </Link>
+                </a>
               );
             })}
           </nav>
