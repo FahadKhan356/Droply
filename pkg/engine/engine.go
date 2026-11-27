@@ -429,6 +429,61 @@ func (n *DroplyNode) startControlServer(bindAddr string) error {
 		_ = json.NewEncoder(w).Encode(peer)
 	}))
 
+	mux.HandleFunc("/api/v1/peers/announce-web", withCORS(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			DeviceID   string `json:"device_id"`
+			DeviceName string `json:"device_name"`
+			DeviceType string `json:"device_type"`
+			Platform   string `json:"platform"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			clientIP = r.RemoteAddr
+		}
+		if clientIP == "::1" || clientIP == "127.0.0.1" {
+			clientIP = n.DeviceMgr.Self().IPAddress
+		}
+
+		if req.DeviceID == "" {
+			req.DeviceID = fmt.Sprintf("web_%s", strings.ReplaceAll(clientIP, ".", "_"))
+		}
+		if req.DeviceName == "" {
+			req.DeviceName = "Mobile Web Client"
+		}
+		if req.DeviceType == "" {
+			req.DeviceType = "android"
+		}
+
+		// Don't register self as peer if accessing from local desktop browser
+		if req.DeviceID == n.DeviceMgr.Self().DeviceID {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ignored_self"})
+			return
+		}
+
+		peer := protocol.DeviceInfo{
+			DeviceID:        req.DeviceID,
+			DeviceName:      req.DeviceName,
+			DeviceType:      req.DeviceType,
+			Platform:        req.Platform,
+			IPAddress:       clientIP,
+			Port:            3000,
+			Capabilities:    []string{"web-client", "direct-download"},
+			ProtocolVersion: protocol.ProtocolVersion,
+			Online:          true,
+			LastSeen:        time.Now(),
+			ConnectionState: protocol.ConnStateConnected,
+			DistanceHint:    "LAN Mobile Web",
+			ProtocolBadge:   "Web P2P Client",
+		}
+
+		registered, _ := n.DiscoverySvc.RegisterManualPeer(peer)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "peer": registered})
+	}))
+
 	// 3. QR & PIN Pairing
 	mux.HandleFunc("/api/v1/pairing/generate", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		self := n.DeviceMgr.Self()

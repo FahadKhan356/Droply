@@ -1,3 +1,13 @@
+export function getDaemonApiUrl(): string {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:53318/api/v1`;
+    }
+  }
+  return process.env.NEXT_PUBLIC_DROPLY_DAEMON_URL || 'http://127.0.0.1:53318/api/v1';
+}
+
 export const DAEMON_API_URL =
   process.env.NEXT_PUBLIC_DROPLY_DAEMON_URL || 'http://127.0.0.1:53318/api/v1';
 
@@ -63,27 +73,27 @@ export interface DaemonHistoryEntry {
 }
 
 export async function fetchDaemonStatus() {
-  const res = await fetch(`${DAEMON_API_URL}/status`, { cache: 'no-store' });
+  const res = await fetch(`${getDaemonApiUrl()}/status`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Daemon unreachable');
   return res.json();
 }
 
 export async function fetchDaemonPeers(): Promise<DaemonPeer[]> {
-  const res = await fetch(`${DAEMON_API_URL}/peers`, { cache: 'no-store' });
+  const res = await fetch(`${getDaemonApiUrl()}/peers`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Daemon unreachable');
   const data = await res.json();
   return data.peers || [];
 }
 
 export async function fetchDaemonFiles(): Promise<RealFileEntry[]> {
-  const res = await fetch(`${DAEMON_API_URL}/files`, { cache: 'no-store' });
+  const res = await fetch(`${getDaemonApiUrl()}/files`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to fetch local files');
   const data = await res.json();
   return data.files || [];
 }
 
 export async function uploadFileToDaemon(file: File): Promise<RealFileEntry> {
-  const res = await fetch(`${DAEMON_API_URL}/files/upload`, {
+  const res = await fetch(`${getDaemonApiUrl()}/files/upload`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/octet-stream',
@@ -100,8 +110,8 @@ export async function fetchDaemonTransfers(): Promise<{
   history: DaemonHistoryEntry[];
 }> {
   const [txRes, histRes] = await Promise.all([
-    fetch(`${DAEMON_API_URL}/transfers`, { cache: 'no-store' }),
-    fetch(`${DAEMON_API_URL}/history`, { cache: 'no-store' }),
+    fetch(`${getDaemonApiUrl()}/transfers`, { cache: 'no-store' }),
+    fetch(`${getDaemonApiUrl()}/history`, { cache: 'no-store' }),
   ]);
   const txData = txRes.ok ? await txRes.json() : { transfers: [] };
   const histData = histRes.ok ? await histRes.json() : { history: [] };
@@ -112,7 +122,7 @@ export async function fetchDaemonTransfers(): Promise<{
 }
 
 export async function triggerDaemonRescan(): Promise<DaemonPeer[]> {
-  const res = await fetch(`${DAEMON_API_URL}/peers/rescan`, {
+  const res = await fetch(`${getDaemonApiUrl()}/peers/rescan`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('Rescan failed');
@@ -121,7 +131,7 @@ export async function triggerDaemonRescan(): Promise<DaemonPeer[]> {
 }
 
 export async function generateDaemonQR() {
-  const res = await fetch(`${DAEMON_API_URL}/pairing/generate`, {
+  const res = await fetch(`${getDaemonApiUrl()}/pairing/generate`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('QR generation failed');
@@ -136,7 +146,7 @@ export async function dispatchDaemonTransfer(params: {
   file_paths?: string[];
   synthetic_file?: { file_name: string; size_bytes: number };
 }) {
-  const res = await fetch(`${DAEMON_API_URL}/transfers/send`, {
+  const res = await fetch(`${getDaemonApiUrl()}/transfers/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -149,7 +159,7 @@ export async function controlDaemonTransfer(
   action: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
   transferId: string
 ) {
-  const res = await fetch(`${DAEMON_API_URL}/transfers/${action}`, {
+  const res = await fetch(`${getDaemonApiUrl()}/transfers/${action}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transfer_id: transferId }),
@@ -159,11 +169,30 @@ export async function controlDaemonTransfer(
 }
 
 export async function saveDaemonSettings(settings: Record<string, any>) {
-  const res = await fetch(`${DAEMON_API_URL}/settings`, {
+  const res = await fetch(`${getDaemonApiUrl()}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   });
   if (!res.ok) throw new Error('Failed to save settings to Go daemon');
   return res.json();
+}
+
+export async function announceWebClient(meta: {
+  device_id: string;
+  device_name: string;
+  device_type: string;
+  platform: string;
+}) {
+  try {
+    const res = await fetch(`${getDaemonApiUrl()}/peers/announce-web`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(meta),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }

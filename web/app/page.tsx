@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   DAEMON_API_URL,
+  getDaemonApiUrl,
+  announceWebClient,
   DaemonHistoryEntry,
   DaemonTransfer,
   RealFileEntry,
@@ -117,12 +119,58 @@ export default function TransfersPage() {
   }, [selectedPeerId]);
 
   useEffect(() => {
+    // Announce this browser client to the DROPly Go network
+    if (typeof window === 'undefined') return;
+    const ua = navigator.userAgent;
+    let devType = 'mac';
+    let devName = 'Web Client';
+    let platform = 'web';
+
+    if (/iPhone/i.test(ua)) {
+      devType = 'ios';
+      devName = "iPhone (Mobile Web)";
+      platform = 'ios';
+    } else if (/iPad/i.test(ua)) {
+      devType = 'tablet';
+      devName = "iPad (Mobile Web)";
+      platform = 'ios';
+    } else if (/Android/i.test(ua)) {
+      devType = 'android';
+      devName = "Android (Mobile Web)";
+      platform = 'android';
+    } else if (/Windows/i.test(ua)) {
+      devType = 'windows';
+      devName = "Windows PC (Web)";
+      platform = 'windows';
+    }
+
+    let clientId = localStorage.getItem('droply_web_client_id');
+    if (!clientId) {
+      clientId = 'web_' + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem('droply_web_client_id', clientId);
+    }
+
+    const announce = () => {
+      announceWebClient({
+        device_id: clientId!,
+        device_name: devName,
+        device_type: devType,
+        platform: platform,
+      });
+    };
+
+    announce();
+    const interval = setInterval(announce, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     loadAllRealData();
     const poll = setInterval(loadAllRealData, 2500);
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource(`${DAEMON_API_URL}/events`);
+      es = new EventSource(`${getDaemonApiUrl()}/events`);
       es.onmessage = (ev) => {
         try {
           const parsed = JSON.parse(ev.data);
